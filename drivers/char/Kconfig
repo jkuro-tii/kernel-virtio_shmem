@@ -108,7 +108,7 @@ config VIRTIO_CONSOLE
 	  the port which can be used by udev scripts to create a
 	  symlink to the device.
 
-config VIRTIO_SHMEM
+config VIRTIO_CHAR_PMEM
 	tristate "Virtio memory sharing"
 	select VIRTIO
 	default n
