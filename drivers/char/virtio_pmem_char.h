@@ -1,14 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * virtio_pmem.h: virtio pmem Driver
+ * virtio_pmem_char.h: virtio pmem character Driver
  *
  * Discovers persistent memory range information
- * from host and provides a virtio based flushing
- * interface.
+ * from host and provides a character device.
  **/
 
-#ifndef _LINUX_VIRTIO_PMEM_H
-#define _LINUX_VIRTIO_PMEM_H
+#ifndef _LINUX_VIRTIO_PMEM_CHAR_H
+#define _LINUX_VIRTIO_PMEM_CHAR_H
 
 #include <linux/module.h>
 #include <uapi/linux/virtio_pmem.h>

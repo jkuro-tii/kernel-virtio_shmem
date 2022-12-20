@@ -9,16 +9,15 @@
 #include <linux/major.h>
 #include <linux/ioport.h>
 #include <linux/miscdevice.h>
-#include "virtio_char_pmem.h"
+#include "virtio_pmem_char.h"
 
 static struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_PMEM, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 
-// TODO jk: remove
 static struct virtio_pmem *vpmem = NULL;
-static struct miscdevice char_pmem_miscdev;
+static struct miscdevice pmem_miscdev;
 
  /* Initialize virt queue */
 static int init_vq(struct virtio_pmem *vpmem)
@@ -38,6 +37,7 @@ static int init_vq(struct virtio_pmem *vpmem)
 static int open_mem(struct inode *inode, struct file *filp)
 {
 	#if 0
+	// TODO jk should be removed
 	int rc;
 
 	if (!capable(CAP_SYS_RAWIO))
@@ -89,19 +89,21 @@ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-static const struct file_operations __maybe_unused char_pmem_fops = {
+static const struct file_operations __maybe_unused pmem_fops = {
 #if 0
 	.llseek		= memory_lseek,
 	.read		= read_mem,
 	.write		= write_mem,
 #endif
 	.mmap		= mmap_mem,
+	/* TODO jk remove*/
+	#if 0
 	.open		= open_mem,
+	#endif
 };
 
 static int virtio_pmem_probe(struct virtio_device *vdev)
 {
-//	struct virtio_pmem *vpmem;
 	int ret;
 	struct resource res, *req;
 	int err = 0;
@@ -111,7 +113,7 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 			__func__);
 		return -EINVAL;
 	}
-
+	printk(">>>>>>>>>>>> probing...");
 	vpmem = devm_kzalloc(&vdev->dev, sizeof(*vpmem), GFP_KERNEL);
 	if (!vpmem) {
 		err = -ENOMEM;
@@ -130,9 +132,7 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 	virtio_cread_le(vpmem->vdev, struct virtio_pmem_config,
 			size, &vpmem->size);
 
-	res.start = vpmem->start;
-	res.end   = vpmem->start + vpmem->size - 1;
-	req = devm_request_mem_region(&vdev->dev, res.start, vpmem->size,
+	req = devm_request_mem_region(&vdev->dev, vpmem->start, vpmem->size,
 				dev_name(&vdev->dev));
 	if (!req)
 	{
@@ -143,7 +143,7 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 		dev_info(&vdev->dev, "reserved region %pR\n", req);
 	}
 
-	return misc_register(&char_pmem_miscdev);
+	return misc_register(&pmem_miscdev);
 
 out_err:
 	return err;
@@ -153,10 +153,11 @@ static void virtio_pmem_remove(struct virtio_device *vdev)
 {
 	vdev->config->del_vqs(vdev);
 	virtio_reset_device(vdev);
+	// devm_release_mem_region(&vdev->dev, res.start, vpmem->size);
+	// misc_deregister(&pmem_fops);
 }
 
-// TODO jk
-static struct virtio_driver virtio_char_pmem_driver = {
+static struct virtio_driver virtio_pmem_driver = {
 	.driver.name	= KBUILD_MODNAME,
 	.driver.owner	= THIS_MODULE,
 	.id_table		= id_table,
@@ -164,14 +165,13 @@ static struct virtio_driver virtio_char_pmem_driver = {
 	.remove			= virtio_pmem_remove,
 };
 
-static struct miscdevice char_pmem_miscdev = {
+static struct miscdevice pmem_miscdev = {
 	.minor		= MISC_DYNAMIC_MINOR,
-	.name		= "char_pmem",
-	.fops		= &char_pmem_fops,
+	.name		= "pmem_char",
+	.fops		= &pmem_fops,
 };
 
-module_virtio_driver(virtio_char_pmem_driver);
-
+module_virtio_driver(virtio_pmem_driver);
 MODULE_DEVICE_TABLE(virtio, id_table);
 MODULE_DESCRIPTION("Virtio pmem char driver");
 MODULE_LICENSE("GPL");

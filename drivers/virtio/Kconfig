@@ -85,12 +85,23 @@ config VIRTIO_PMEM
 	tristate "Support for virtio pmem driver"
 	depends on VIRTIO
 	depends on LIBNVDIMM
+	depends on VIRTIO_PMEM_CHAR = "n"
 	help
 	  This driver provides access to virtio-pmem devices, storage devices
 	  that are mapped into the physical address space - similar to NVDIMMs
 	   - with a virtio-based flushing interface.
 
 	  If unsure, say Y.
+
+config VIRTIO_PMEM_CHAR
+	tristate "Support for virtio pmem char driver"
+	select VIRTIO
+	default m
+	help
+	  Virtio memory sharing for use with hypervisors.
+
+	  Enables driver for the /dev/misc/pmem_char device which may be used
+	  for sharing memory with other virtual machines.
 
 config VIRTIO_BALLOON
 	tristate "Virtio balloon driver"

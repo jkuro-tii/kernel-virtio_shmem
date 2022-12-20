@@ -108,16 +108,6 @@ config VIRTIO_CONSOLE
 	  the port which can be used by udev scripts to create a
 	  symlink to the device.
 
-config VIRTIO_CHAR_PMEM
-	tristate "Virtio memory sharing"
-	select VIRTIO
-	default n
-	help
-	  Virtio memory sharing for use with hypervisors.
-
-	  Enables driver for the /dev/virtio-shmem device. Is is used
-	  for sharing memory with other virtual machines.
-
 config IBM_BSR
 	tristate "IBM POWER Barrier Synchronization Register support"
 	depends on PPC_PSERIES
