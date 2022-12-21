@@ -9,6 +9,7 @@
 #include <linux/major.h>
 #include <linux/ioport.h>
 #include <linux/miscdevice.h>
+#include <linux/fs.h>
 #include "virtio_pmem_char.h"
 
 static struct virtio_device_id id_table[] = {
@@ -34,36 +35,132 @@ static int init_vq(struct virtio_pmem *vpmem)
 	return 0;
 };
 
-static int open_mem(struct inode *inode, struct file *filp)
+static loff_t pmem_lseek(struct file *filp, loff_t off, int whence)
 {
-	#if 0
-	// TODO jk should be removed
-	int rc;
+	loff_t newpos;
+	pr_info("JK: %s", __FUNCTION__);
 
-	if (!capable(CAP_SYS_RAWIO))
-		return -EPERM;
+	switch (whence) {
+	case SEEK_SET:
+		if (off >= vpmem->size)
+		{
+			newpos = -ESPIPE;
+			goto out;
+		}
+		newpos = off;
+		break;
 
-	rc = security_locked_down(LOCKDOWN_DEV_MEM);
-	if (rc)
-		return rc;
+	case SEEK_CUR:
+		newpos = filp->f_pos + off;
+		if (newpos >= vpmem->size)
+		{
+			newpos = -ESPIPE;
+			goto out;
+		}
+		break;
 
-	if (iminor(inode) != DEVMEM_MINOR)
-		return 0;
-	#endif
-	if (!vpmem)
-		return -ENODEV;
-	/*
-	 * Use a unified address space to have a single point to manage
-	 * revocations when drivers want to take over a /dev/mem mapped
-	 * range.
-	 */
-	// filp->f_mapping = iomem_get_mapping();
-	pr_info("%s", __FUNCTION__);
-	printk("vpmem->start=0x%llx vpmem->size=0x%llx", vpmem->start, vpmem->size);
-	return 0;
+	case SEEK_END:
+		newpos = vpmem->size;
+		break;
+
+	default: /* can't happen */
+		newpos = -EINVAL;
+		goto out;
+	}
+
+	filp->f_pos = newpos;
+out:
+	return newpos;
 }
 
-static int mmap_mem(struct file *file, struct vm_area_struct *vma)
+static ssize_t pmem_write(struct file *file, const char __user *buf,
+			  size_t count, loff_t *ppos)
+{
+	loff_t pos = *ppos;
+	void *pmem_addr, *temp_buf = NULL;
+	unsigned long long map_start_addr;
+
+	if (count > vpmem->size - pos)
+		count = vpmem->size - pos;
+	
+	map_start_addr = vpmem->start + pos;
+	pmem_addr = ioremap(map_start_addr, count);
+	if (!pmem_addr)
+	{
+		pr_err("ioremap failed");
+		return -ENOMEM;
+	}
+	temp_buf = kmalloc(count, GFP_USER);
+	if (!temp_buf)
+	{
+		pr_err("kmalloc failed");
+		count = -ENOMEM;
+		goto out;
+	}
+	pr_info("WW map_start_addr: %p pmem_addr: %p temp_buf: %p", map_start_addr, pmem_addr, temp_buf);
+
+	if (copy_from_user(temp_buf, buf, count))
+	{
+		pr_err("copy_from_user failed");
+		count = -EFAULT;
+		goto out;
+	}
+	memcpy_toio(pmem_addr, temp_buf, count);
+
+	*ppos += count;
+out:
+	iounmap(pmem_addr);
+	if (temp_buf)
+		kfree(temp_buf);
+
+	return count;
+}
+
+static ssize_t pmem_read(struct file *file, char __user *buf,
+			  size_t count, loff_t *ppos)
+{
+	loff_t pos = *ppos;
+	void *pmem_addr, *temp_buf = NULL;
+	unsigned long long map_start_addr;
+
+	if (count > vpmem->size - pos)
+		count = vpmem->size - pos;
+
+	map_start_addr = vpmem->start + pos;
+	pmem_addr = ioremap(map_start_addr, count);
+	if (!pmem_addr)
+	{
+		pr_err("ioremap failed");
+		return -ENOMEM;
+	}
+	temp_buf = kmalloc(count, GFP_USER)
+	if (!temp_buf)
+	{
+		pr_err("kmalloc failed");
+		count = -ENOMEM;
+		goto out;
+	}
+	pr_info("RR map_start_addr: %p pmem_addr: %p temp_buf: %p", map_start_addr, pmem_addr, temp_buf);
+
+	memcpy_fromio(temp_buf, pmem_addr, count);
+
+	if (copy_to_user(buf, temp_buf, count))
+	{
+		pr_info("copy_to_user failed");
+		count = -EFAULT;
+		goto out;
+	}
+	*ppos += count;
+
+out:
+	iounmap(pmem_addr);
+	if (temp_buf)
+		kfree(temp_buf);
+
+	return count;
+}
+
+static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	pr_info("JK: %s", __FUNCTION__);
 	printk(">>vpmem->start=0x%llx vpmem->size=0x%llx", vpmem->start, vpmem->size);
@@ -74,7 +171,7 @@ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 
 	pr_info(">>pgprot_noncached=0x%x", pgprot_noncached(vma->vm_page_prot));
 
-	pr_info(">>vma->vm_flags=0x%x", vma->vm_flags);
+	pr_info(">>vma->vm_flags=0x%lx", vma->vm_flags);
 	vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP | VM_MIXEDMAP | VM_READ | VM_WRITE;
 	pr_info(">>added flags: vma->vm_flags=0x%x", vma->vm_flags);
 	// vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
@@ -83,29 +180,22 @@ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 		pr_err("could not map the address area\n");
 		return -EIO;
 	}
-	pr_info(">>after flags: vma->vm_flags=0x%x", vma->vm_flags);
+	pr_info(">>after flags: vma->vm_flags=0x%lx", vma->vm_flags);
 	vma->vm_flags = VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP | VM_MIXEDMAP | VM_READ | VM_WRITE;
 
 	return 0;
 }
 
 static const struct file_operations __maybe_unused pmem_fops = {
-#if 0
-	.llseek		= memory_lseek,
-	.read		= read_mem,
-	.write		= write_mem,
-#endif
-	.mmap		= mmap_mem,
-	/* TODO jk remove*/
-	#if 0
-	.open		= open_mem,
-	#endif
+	.llseek		= pmem_lseek,
+	.read		= pmem_read,
+	.write		= pmem_write,
+	.mmap		= pmem_mmap,
 };
 
 static int virtio_pmem_probe(struct virtio_device *vdev)
 {
-	int ret;
-	struct resource res, *req;
+	struct resource *req;
 	int err = 0;
 
 	if (!vdev->config->get) {
@@ -113,7 +203,7 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 			__func__);
 		return -EINVAL;
 	}
-	printk(">>>>>>>>>>>> probing...");
+
 	vpmem = devm_kzalloc(&vdev->dev, sizeof(*vpmem), GFP_KERNEL);
 	if (!vpmem) {
 		err = -ENOMEM;
@@ -136,7 +226,7 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 				dev_name(&vdev->dev));
 	if (!req)
 	{
-		dev_warn(&vdev->dev, "could not reserve region %pR\n", res);
+		dev_warn(&vdev->dev, "could not reserve region\n");
 	}
 	else
 	{
@@ -153,8 +243,8 @@ static void virtio_pmem_remove(struct virtio_device *vdev)
 {
 	vdev->config->del_vqs(vdev);
 	virtio_reset_device(vdev);
-	// devm_release_mem_region(&vdev->dev, res.start, vpmem->size);
-	// misc_deregister(&pmem_fops);
+	devm_release_mem_region(&vdev->dev, vpmem->start, vpmem->size);
+	misc_deregister(&pmem_miscdev);
 }
 
 static struct virtio_driver virtio_pmem_driver = {
