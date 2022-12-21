@@ -20,12 +20,12 @@ static struct virtio_device_id id_table[] = {
 static struct virtio_pmem *vpmem = NULL;
 static struct miscdevice pmem_miscdev;
 
- /* Initialize virt queue */
+/* Initialize virt queue */
 static int init_vq(struct virtio_pmem *vpmem)
 {
 	/* single vq */
-	vpmem->req_vq = virtio_find_single_vq(vpmem->vdev,
-					virtio_pmem_host_ack, "flush_queue");
+	vpmem->req_vq = virtio_find_single_vq(vpmem->vdev, virtio_pmem_host_ack,
+					      "flush_queue");
 	if (IS_ERR(vpmem->req_vq))
 		return PTR_ERR(vpmem->req_vq);
 
@@ -42,8 +42,7 @@ static loff_t pmem_lseek(struct file *filp, loff_t off, int whence)
 
 	switch (whence) {
 	case SEEK_SET:
-		if (off >= vpmem->size)
-		{
+		if (off >= vpmem->size) {
 			newpos = -ESPIPE;
 			goto out;
 		}
@@ -52,8 +51,7 @@ static loff_t pmem_lseek(struct file *filp, loff_t off, int whence)
 
 	case SEEK_CUR:
 		newpos = filp->f_pos + off;
-		if (newpos >= vpmem->size)
-		{
+		if (newpos >= vpmem->size) {
 			newpos = -ESPIPE;
 			goto out;
 		}
@@ -82,25 +80,23 @@ static ssize_t pmem_write(struct file *file, const char __user *buf,
 
 	if (count > vpmem->size - pos)
 		count = vpmem->size - pos;
-	
+
 	map_start_addr = vpmem->start + pos;
 	pmem_addr = ioremap(map_start_addr, count);
-	if (!pmem_addr)
-	{
+	if (!pmem_addr) {
 		pr_err("ioremap failed");
 		return -ENOMEM;
 	}
 	temp_buf = kmalloc(count, GFP_USER);
-	if (!temp_buf)
-	{
+	if (!temp_buf) {
 		pr_err("kmalloc failed");
 		count = -ENOMEM;
 		goto out;
 	}
-	pr_info("WW map_start_addr: %p pmem_addr: %p temp_buf: %p", map_start_addr, pmem_addr, temp_buf);
+	pr_info("WW map_start_addr: %p pmem_addr: %p temp_buf: %p",
+		map_start_addr, pmem_addr, temp_buf);
 
-	if (copy_from_user(temp_buf, buf, count))
-	{
+	if (copy_from_user(temp_buf, buf, count)) {
 		pr_err("copy_from_user failed");
 		count = -EFAULT;
 		goto out;
@@ -116,8 +112,8 @@ out:
 	return count;
 }
 
-static ssize_t pmem_read(struct file *file, char __user *buf,
-			  size_t count, loff_t *ppos)
+static ssize_t pmem_read(struct file *file, char __user *buf, size_t count,
+			 loff_t *ppos)
 {
 	loff_t pos = *ppos;
 	void *pmem_addr, *temp_buf = NULL;
@@ -128,24 +124,23 @@ static ssize_t pmem_read(struct file *file, char __user *buf,
 
 	map_start_addr = vpmem->start + pos;
 	pmem_addr = ioremap(map_start_addr, count);
-	if (!pmem_addr)
-	{
+	if (!pmem_addr) {
 		pr_err("ioremap failed");
 		return -ENOMEM;
 	}
-	temp_buf = kmalloc(count, GFP_USER)
+	temp_buf = kmalloc(count, GFP_USER);
 	if (!temp_buf)
 	{
 		pr_err("kmalloc failed");
 		count = -ENOMEM;
 		goto out;
 	}
-	pr_info("RR map_start_addr: %p pmem_addr: %p temp_buf: %p", map_start_addr, pmem_addr, temp_buf);
+	pr_info("RR map_start_addr: %p pmem_addr: %p temp_buf: %p",
+		map_start_addr, pmem_addr, temp_buf);
 
 	memcpy_fromio(temp_buf, pmem_addr, count);
 
-	if (copy_to_user(buf, temp_buf, count))
-	{
+	if (copy_to_user(buf, temp_buf, count)) {
 		pr_info("copy_to_user failed");
 		count = -EFAULT;
 		goto out;
@@ -163,34 +158,36 @@ out:
 static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	pr_info("JK: %s", __FUNCTION__);
-	printk(">>vpmem->start=0x%llx vpmem->size=0x%llx", vpmem->start, vpmem->size);
+	printk(">>vpmem->start=0x%llx vpmem->size=0x%llx", vpmem->start,
+	       vpmem->size);
 
-	pr_info(">>phys_mem_access_prot=0x%x", phys_mem_access_prot(file, vma->vm_pgoff,
-						 vpmem->size,
-						 vma->vm_page_prot));
+	pr_info(">>phys_mem_access_prot=0x%x",
+		phys_mem_access_prot(file, vma->vm_pgoff, vpmem->size,
+				     vma->vm_page_prot));
 
 	pr_info(">>pgprot_noncached=0x%x", pgprot_noncached(vma->vm_page_prot));
 
 	pr_info(">>vma->vm_flags=0x%lx", vma->vm_flags);
-	vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP | VM_MIXEDMAP | VM_READ | VM_WRITE;
+	vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP |
+			 VM_MIXEDMAP | VM_READ | VM_WRITE;
 	pr_info(">>added flags: vma->vm_flags=0x%x", vma->vm_flags);
 	// vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-	if (vm_iomap_memory(vma, vpmem->start, vpmem->size) < 0) 
-	{
+	if (vm_iomap_memory(vma, vpmem->start, vpmem->size) < 0) {
 		pr_err("could not map the address area\n");
 		return -EIO;
 	}
 	pr_info(">>after flags: vma->vm_flags=0x%lx", vma->vm_flags);
-	vma->vm_flags = VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP | VM_MIXEDMAP | VM_READ | VM_WRITE;
+	vma->vm_flags = VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP |
+			VM_MIXEDMAP | VM_READ | VM_WRITE;
 
 	return 0;
 }
 
 static const struct file_operations __maybe_unused pmem_fops = {
-	.llseek		= pmem_lseek,
-	.read		= pmem_read,
-	.write		= pmem_write,
-	.mmap		= pmem_mmap,
+	.llseek = pmem_lseek,
+	.read = pmem_read,
+	.write = pmem_write,
+	.mmap = pmem_mmap,
 };
 
 static int virtio_pmem_probe(struct virtio_device *vdev)
@@ -217,19 +214,16 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 		goto out_err;
 	}
 
-	virtio_cread_le(vpmem->vdev, struct virtio_pmem_config,
-			start, &vpmem->start);
-	virtio_cread_le(vpmem->vdev, struct virtio_pmem_config,
-			size, &vpmem->size);
+	virtio_cread_le(vpmem->vdev, struct virtio_pmem_config, start,
+			&vpmem->start);
+	virtio_cread_le(vpmem->vdev, struct virtio_pmem_config, size,
+			&vpmem->size);
 
 	req = devm_request_mem_region(&vdev->dev, vpmem->start, vpmem->size,
-				dev_name(&vdev->dev));
-	if (!req)
-	{
+				      dev_name(&vdev->dev));
+	if (!req) {
 		dev_warn(&vdev->dev, "could not reserve region\n");
-	}
-	else
-	{
+	} else {
 		dev_info(&vdev->dev, "reserved region %pR\n", req);
 	}
 
@@ -248,17 +242,17 @@ static void virtio_pmem_remove(struct virtio_device *vdev)
 }
 
 static struct virtio_driver virtio_pmem_driver = {
-	.driver.name	= KBUILD_MODNAME,
-	.driver.owner	= THIS_MODULE,
-	.id_table		= id_table,
-	.probe			= virtio_pmem_probe,
-	.remove			= virtio_pmem_remove,
+	.driver.name 	= KBUILD_MODNAME,
+	.driver.owner 	= THIS_MODULE,
+	.id_table 		= id_table,
+	.probe 			= virtio_pmem_probe,
+	.remove 		= virtio_pmem_remove,
 };
 
 static struct miscdevice pmem_miscdev = {
-	.minor		= MISC_DYNAMIC_MINOR,
-	.name		= "pmem_char",
-	.fops		= &pmem_fops,
+	.minor 	= MISC_DYNAMIC_MINOR,
+	.name 	= "pmem_char",
+	.fops 	= &pmem_fops,
 };
 
 module_virtio_driver(virtio_pmem_driver);
