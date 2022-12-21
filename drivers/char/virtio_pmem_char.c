@@ -38,7 +38,6 @@ static int init_vq(struct virtio_pmem *vpmem)
 static loff_t pmem_lseek(struct file *filp, loff_t off, int whence)
 {
 	loff_t newpos;
-	pr_info("JK: %s", __FUNCTION__);
 
 	switch (whence) {
 	case SEEK_SET:
@@ -80,6 +79,8 @@ static ssize_t pmem_write(struct file *file, const char __user *buf,
 
 	if (count > vpmem->size - pos)
 		count = vpmem->size - pos;
+	if (!count)
+		return 0;
 
 	map_start_addr = vpmem->start + pos;
 	pmem_addr = ioremap(map_start_addr, count);
@@ -121,6 +122,8 @@ static ssize_t pmem_read(struct file *file, char __user *buf, size_t count,
 
 	if (count > vpmem->size - pos)
 		count = vpmem->size - pos;
+	if (!count)
+		return 0;
 
 	map_start_addr = vpmem->start + pos;
 	pmem_addr = ioremap(map_start_addr, count);
@@ -168,15 +171,12 @@ static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 	pr_info(">>pgprot_noncached=0x%x", pgprot_noncached(vma->vm_page_prot));
 
 	pr_info(">>vma->vm_flags=0x%lx", vma->vm_flags);
-	vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP |
-			 VM_MIXEDMAP | VM_READ | VM_WRITE;
 	pr_info(">>added flags: vma->vm_flags=0x%x", vma->vm_flags);
-	// vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	if (vm_iomap_memory(vma, vpmem->start, vpmem->size) < 0) {
 		pr_err("could not map the address area\n");
 		return -EIO;
 	}
-	pr_info(">>after flags: vma->vm_flags=0x%lx", vma->vm_flags);
+	pr_info(">>vma flags: vma->vm_flags=0x%lx", vma->vm_flags);
 	vma->vm_flags = VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP |
 			VM_MIXEDMAP | VM_READ | VM_WRITE;
 
@@ -184,10 +184,10 @@ static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 }
 
 static const struct file_operations __maybe_unused pmem_fops = {
-	.llseek = pmem_lseek,
-	.read = pmem_read,
-	.write = pmem_write,
-	.mmap = pmem_mmap,
+	.llseek = 	pmem_lseek,
+	.read 	= 	pmem_read,
+	.write 	= 	pmem_write,
+	.mmap 	= 	pmem_mmap,
 };
 
 static int virtio_pmem_probe(struct virtio_device *vdev)
