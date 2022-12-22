@@ -84,21 +84,14 @@ static ssize_t pmem_write(struct file *file, const char __user *buf,
 
 	map_start_addr = vpmem->start + pos;
 	pmem_addr = ioremap(map_start_addr, count);
-	if (!pmem_addr) {
-		pr_err("ioremap failed");
+	if (!pmem_addr)
 		return -ENOMEM;
-	}
 	temp_buf = kmalloc(count, GFP_USER);
-	if (!temp_buf) {
-		pr_err("kmalloc failed");
+	if (!temp_buf)
 		count = -ENOMEM;
 		goto out;
-	}
-	pr_info("WW map_start_addr: %p pmem_addr: %p temp_buf: %p",
-		map_start_addr, pmem_addr, temp_buf);
 
 	if (copy_from_user(temp_buf, buf, count)) {
-		pr_err("copy_from_user failed");
 		count = -EFAULT;
 		goto out;
 	}
@@ -128,23 +121,18 @@ static ssize_t pmem_read(struct file *file, char __user *buf, size_t count,
 	map_start_addr = vpmem->start + pos;
 	pmem_addr = ioremap(map_start_addr, count);
 	if (!pmem_addr) {
-		pr_err("ioremap failed");
 		return -ENOMEM;
 	}
 	temp_buf = kmalloc(count, GFP_USER);
 	if (!temp_buf)
 	{
-		pr_err("kmalloc failed");
 		count = -ENOMEM;
 		goto out;
 	}
-	pr_info("RR map_start_addr: %p pmem_addr: %p temp_buf: %p",
-		map_start_addr, pmem_addr, temp_buf);
 
 	memcpy_fromio(temp_buf, pmem_addr, count);
 
 	if (copy_to_user(buf, temp_buf, count)) {
-		pr_info("copy_to_user failed");
 		count = -EFAULT;
 		goto out;
 	}
@@ -160,23 +148,9 @@ out:
 
 static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	pr_info("JK: %s", __FUNCTION__);
-	printk(">>vpmem->start=0x%llx vpmem->size=0x%llx", vpmem->start,
-	       vpmem->size);
-
-	pr_info(">>phys_mem_access_prot=0x%x",
-		phys_mem_access_prot(file, vma->vm_pgoff, vpmem->size,
-				     vma->vm_page_prot));
-
-	pr_info(">>pgprot_noncached=0x%x", pgprot_noncached(vma->vm_page_prot));
-
-	pr_info(">>vma->vm_flags=0x%lx", vma->vm_flags);
-	pr_info(">>added flags: vma->vm_flags=0x%x", vma->vm_flags);
-	if (vm_iomap_memory(vma, vpmem->start, vpmem->size) < 0) {
-		pr_err("could not map the address area\n");
+	if (vm_iomap_memory(vma, vpmem->start, vpmem->size) < 0)
 		return -EIO;
-	}
-	pr_info(">>vma flags: vma->vm_flags=0x%lx", vma->vm_flags);
+
 	vma->vm_flags = VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP |
 			VM_MIXEDMAP | VM_READ | VM_WRITE;
 
