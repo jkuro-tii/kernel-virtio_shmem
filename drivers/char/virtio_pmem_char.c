@@ -87,9 +87,10 @@ static ssize_t pmem_write(struct file *file, const char __user *buf,
 	if (!pmem_addr)
 		return -ENOMEM;
 	temp_buf = kmalloc(count, GFP_USER);
-	if (!temp_buf)
+	if (!temp_buf) {
 		count = -ENOMEM;
 		goto out;
+	}
 
 	if (copy_from_user(temp_buf, buf, count)) {
 		count = -EFAULT;
@@ -210,7 +211,6 @@ out_err:
 static void virtio_pmem_remove(struct virtio_device *vdev)
 {
 	vdev->config->del_vqs(vdev);
-	virtio_reset_device(vdev);
 	devm_release_mem_region(&vdev->dev, vpmem->start, vpmem->size);
 	misc_deregister(&pmem_miscdev);
 }
